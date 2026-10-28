@@ -7,11 +7,15 @@ document.addEventListener("DOMContentLoaded", () => {
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
-      const response = await fetch("/activities");
+      const response = await fetch("/activities", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Failed to load activities: ${response.status}`);
+      }
       const activities = await response.json();
 
       // Clear loading message
       activitiesList.innerHTML = "";
+      activitySelect.length = 1;
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -27,6 +31,57 @@ document.addEventListener("DOMContentLoaded", () => {
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
         `;
 
+        const participants = document.createElement("div");
+        participants.className = "activity-participants";
+
+        const heading = document.createElement("h5");
+        heading.textContent = "Participantes";
+        participants.appendChild(heading);
+
+        if (details.participants.length > 0) {
+          const list = document.createElement("ul");
+          details.participants.forEach((email) => {
+            const item = document.createElement("li");
+            const participantEmail = document.createElement("span");
+            participantEmail.textContent = email;
+
+            const deleteButton = document.createElement("button");
+            deleteButton.type = "button";
+            deleteButton.className = "delete-participant";
+            deleteButton.textContent = "\u{1F5D1}\uFE0E";
+            deleteButton.title = `Cancelar inscrição de ${email}`;
+            deleteButton.setAttribute("aria-label", deleteButton.title);
+            deleteButton.addEventListener("click", async () => {
+              deleteButton.disabled = true;
+              try {
+                const response = await fetch(
+                  `/activities/${encodeURIComponent(name)}/signup?email=${encodeURIComponent(email)}`,
+                  { method: "DELETE" }
+                );
+                if (!response.ok) {
+                  throw new Error(`Failed to unregister participant: ${response.status}`);
+                }
+                await fetchActivities();
+              } catch (error) {
+                messageDiv.textContent = "Não foi possível cancelar a inscrição. Tente novamente.";
+                messageDiv.className = "error";
+                deleteButton.disabled = false;
+                console.error("Error unregistering participant:", error);
+              }
+            });
+
+            item.appendChild(participantEmail);
+            item.appendChild(deleteButton);
+            list.appendChild(item);
+          });
+          participants.appendChild(list);
+        } else {
+          const emptyMessage = document.createElement("p");
+          emptyMessage.textContent = "Nenhum participante inscrito ainda.";
+          participants.appendChild(emptyMessage);
+        }
+
+        activityCard.appendChild(participants);
         activitiesList.appendChild(activityCard);
 
         // Add option to select dropdown
@@ -62,6 +117,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        await fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
